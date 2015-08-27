@@ -29,9 +29,9 @@ import time
 import plot_dxf
 import argparse
 
-parser = argparse.ArgumentParser(description='Process some integers.')
-parser.add_argument('--img', help='image file to input', default='image.jpg')
-parser.add_argument('--loops', help='don\'t connect the left side of the loops', default=False, action='store_true')
+parser = argparse.ArgumentParser(description='Create a halftone using nested parallel lines.')
+parser.add_argument('--img', help='image file to process', default='image.jpg')
+parser.add_argument('--loops', help='merge the sides of the loops', default=False, action='store_true')
 args = parser.parse_args()
 
 imagename = args.img
