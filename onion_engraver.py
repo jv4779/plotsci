@@ -71,6 +71,7 @@ def sampleimg(sx, sy):
       return 257
    return pix[ix, iy]
 
+# return end1 moved towards end2 by offset amount
 def offset_line_end1(x1, y1, x2, y2, offset):
     dx = x1 - x2
     dy = y1 - y2
@@ -153,8 +154,13 @@ def do_a_line(w, level_step, pens, thresholds):
          # right side x offset, lowest level is outmost
          this_pass_o = {}
          this_pass_points = {}
+
+         even_offset = 0
+         if l % 2 == 0:
+            even_offset = level_step / 2.0
+         l = (l + 1) / 2
          for j in xrange(l):
-            this_pass_o[j] = (l - j - 1) * level_step
+            this_pass_o[j] = (l - j - 1) * level_step + even_offset
 
          for this_l, this_o in this_pass_o.items():
             pen = pens[this_l]
@@ -234,20 +240,36 @@ def draw_overlay(overlay):
         do_a_line(w, overlay['level_spacing'], wave[1], [255 - i for i in wave[2]])
 
 
+extra_fine_overlay = {
+  # all waves that should be in this overlay
+  'waves': [
+      # [angle, pens, thresholds]
+      (math.pi / 4.0, [1],                [ +80]),
+      (0,             [1, 1],    [ +140, +160]),
+      (math.pi / 2.0, [1, 1, 1], [ +100, +120, +180]),
+  ],
+  # distance each line is offset, screen units
+  'line_spacing': 2.75,
+  # distance along each line for intensity changes, screen units
+  'line_res': 1,
+  # distance between the onion layers, screen units
+  'level_spacing': 0.8,
+}
+
 fine_overlay = {
   # all waves that should be in this overlay
   'waves': [
       # [angle, pens, thresholds]
-      (math.pi / 4.0, [1],       [+80]),
-      (0,             [1, 1],    [+140, +160]),
-      (math.pi / 2.0, [1, 1, 1], [+100, +120, +180]),
+      (math.pi / 4.0, [1],                [ +80]),
+      (0,             [1, 1, 1, 1, 1],    [ 140,  140,  140, +140, +160]),
+      (math.pi / 2.0, [1, 1, 1, 1, 1, 1], [ 100, +100, +120,  180,  180, +180]),
   ],
   # distance each line is offset, screen units
   'line_spacing': 5,
   # distance along each line for intensity changes, screen units
-  'line_res': 2,
+  'line_res': 1.5,
   # distance between the onion layers, screen units
-  'level_spacing': 1,
+  'level_spacing': 0.8,
 }
 
 marker_overlay = {
@@ -267,7 +289,7 @@ marker_overlay = {
 }
 
 
-draw_overlay(fine_overlay)
+draw_overlay(extra_fine_overlay)
 
 dxf.footer(dxfname)
 
