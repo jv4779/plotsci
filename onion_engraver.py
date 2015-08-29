@@ -60,18 +60,22 @@ def sxtoix(sx):
 def sytoiy(sy):
   return (image_height * sy) / screen_height;
 
+# return
+#  -1 for out of bounds
+#  0 for lightest
+#  255 for darkest
 def sampleimg(sx, sy):
    ix = sxtoix(sx)
    iy = sytoiy(sy)
    if ix < 0:
-      return 257
+      return -1
    if iy < 0:
-      return 257
+      return -1
    if ix >= image_width:
-      return 257
+      return -1
    if iy >= image_height:
-      return 257
-   return pix[ix, iy]
+      return -1
+   return 255 - pix[ix, iy]
 
 # return end1 moved towards end2 by offset amount
 def offset_line_end1(x1, y1, x2, y2, offset):
@@ -150,7 +154,7 @@ def do_a_line(w, level_step, pens, thresholds):
 
          l = 0;
          for t in thresholds:
-            if s <= t:
+            if s >= t:
                l += 1
 
          # right side x offset, lowest level is outmost
@@ -291,7 +295,7 @@ if args.method == 'wave':
                         angle = wave[0],
                         step=spec['line_res'] / 2.0, length=line_length,
                         period=period, amplitude=amplitude)
-          do_a_line(w, spec['level_spacing'], wave[1], [255 - i for i in wave[2]])
+          do_a_line(w, spec['level_spacing'], wave[1], wave[2])
 
   draw_waves(wave_specs[args.spec])
 
