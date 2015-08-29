@@ -224,24 +224,6 @@ class wave_path:
 #dxf.circle(0,-0,3,pen=6)
 #dxf.circle(screen_width,-screen_height,3,pen=7)
 
-def draw_waves(spec, period=50, amplitude=20):
-  print 'spec = %s' % spec
-
-  line_length = math.sqrt(screen_width * screen_width + screen_height * screen_height)
-  x_count = int(line_length / float(spec['line_spacing']))
-
-  print 'x_count = %d' % x_count
-
-  for wave in spec['waves']:
-     print('wave %s' % str(wave))
-     for i in xrange(x_count):
-        w = wave_path(screen_width / 2.0, screen_height / 2.0,
-                      offset = (i + 0.5 - x_count / 2.0) * spec['line_spacing'],
-                      angle = wave[0],
-                      step=spec['line_res'] / 2.0, length=line_length,
-                      period=period, amplitude=amplitude)
-        do_a_line(w, spec['level_spacing'], wave[1], [255 - i for i in wave[2]])
-
 if args.method == 'wave':
   wave_specs = {
     'extra_fine': {
@@ -293,7 +275,69 @@ if args.method == 'wave':
     },
   }
 
+  def draw_waves(spec, period=50, amplitude=20):
+    print 'spec = %s' % spec
+
+    line_length = math.sqrt(screen_width * screen_width + screen_height * screen_height)
+    x_count = int(line_length / float(spec['line_spacing']))
+
+    print 'x_count = %d' % x_count
+
+    for wave in spec['waves']:
+       print('wave %s' % str(wave))
+       for i in xrange(x_count):
+          w = wave_path(screen_width / 2.0, screen_height / 2.0,
+                        offset = (i + 0.5 - x_count / 2.0) * spec['line_spacing'],
+                        angle = wave[0],
+                        step=spec['line_res'] / 2.0, length=line_length,
+                        period=period, amplitude=amplitude)
+          do_a_line(w, spec['level_spacing'], wave[1], [255 - i for i in wave[2]])
+
   draw_waves(wave_specs[args.spec])
+
+class circle_involute_path:
+   def __init__(self, x_center, y_center, r=1, step=1, end_r=10):
+      self.t0 = 0.0
+      self.a = float(r) / (math.sqrt(1 + 4 * math.pi * math.pi) - 1)
+      self.step = float(step)
+      self.end_r2 = end_r * end_r
+      self.x_center = x_center
+      self.y_center = y_center
+
+   def __iter__(self):
+      return self
+
+   def next(self):
+      t1 = math.sqrt(2.0 * self.step / self.a + self.t0 * self.t0)
+      x = self.a * (math.cos(t1) + t1 * math.sin(t1))
+      y = self.a * (math.sin(t1) - t1 * math.cos(t1))
+      if x * x + y * y > self.end_r2:
+         raise StopIteration()
+      self.t0 = t1
+      return (x + self.x_center, y + self.y_center)
+
+if args.method == 'circle_involute':
+
+  spec = {
+      'line_spacing': 4.5,
+      'level_spacing': 0.8,
+      'line_res': 1.0,
+      'paths': [
+          # [offset, pens, thresholds]
+          ((0, 0), [1, 1, 1], [+80, +100, +120, +140, +160, +180]),
+      ],
+  }
+
+  end_r = math.sqrt(screen_width * screen_width + screen_height * screen_height) / 2.0
+
+  for path in spec['paths']:
+    print('path %s' % str(path))
+    p = circle_involute_path(screen_width / 2.0, screen_height / 2.0,
+                             r=spec['line_spacing'],
+                             step=spec['line_res'], end_r=end_r)
+    do_a_line(p, spec['level_spacing'], path[1], [255 - i for i in path[2]])
+
+
 
 dxf.footer(dxfname)
 
