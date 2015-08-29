@@ -31,6 +31,8 @@ import argparse
 
 parser = argparse.ArgumentParser(description='Create a halftone using nested parallel lines.')
 parser.add_argument('--img', help='image file to process', default='image.jpg')
+parser.add_argument('--method', help='method to use', default='wave')
+parser.add_argument('--spec', help='spec to use', default='extra_fine')
 parser.add_argument('--loops', help='merge the sides of the loops', default=False, action='store_true')
 args = parser.parse_args()
 
@@ -222,74 +224,76 @@ class wave_path:
 #dxf.circle(0,-0,3,pen=6)
 #dxf.circle(screen_width,-screen_height,3,pen=7)
 
-def draw_overlay(overlay):
-  print 'overlay = %s' % overlay
+def draw_waves(spec, period=50, amplitude=20):
+  print 'spec = %s' % spec
 
   line_length = math.sqrt(screen_width * screen_width + screen_height * screen_height)
-  x_count = int(line_length / float(overlay['line_spacing']))
+  x_count = int(line_length / float(spec['line_spacing']))
 
   print 'x_count = %d' % x_count
 
-  for wave in overlay['waves']:
+  for wave in spec['waves']:
      print('wave %s' % str(wave))
      for i in xrange(x_count):
         w = wave_path(screen_width / 2.0, screen_height / 2.0,
-                      offset = (i + 0.5 - x_count / 2.0) * overlay['line_spacing'],
+                      offset = (i + 0.5 - x_count / 2.0) * spec['line_spacing'],
                       angle = wave[0],
-                      step=overlay['line_res'] / 2.0, length=line_length, period=50, amplitude=20)
-        do_a_line(w, overlay['level_spacing'], wave[1], [255 - i for i in wave[2]])
+                      step=spec['line_res'] / 2.0, length=line_length,
+                      period=period, amplitude=amplitude)
+        do_a_line(w, spec['level_spacing'], wave[1], [255 - i for i in wave[2]])
 
+if args.method == 'wave':
+  wave_specs = {
+    'extra_fine': {
+      # all waves that should be in this overlay
+      'waves': [
+          # [angle, pens, thresholds]
+          (math.pi / 4.0, [1],       [ +80]),
+          (0,             [1],       [ +140, +160]),
+          (math.pi / 2.0, [1, 1], [ +100, +120, +180]),
+      ],
+      # distance each line is offset, screen units
+      'line_spacing': 2.75,
+      # distance along each line for intensity changes, screen units
+      'line_res': 1,
+      # distance between the onion layers, screen units
+      'level_spacing': 0.8,
+    },
+  
+    'fine': {
+      # all waves that should be in this overlay
+      'waves': [
+          # [angle, pens, thresholds]
+          (math.pi / 4.0, [1],       [ +80]),
+          (0,             [1, 1, 1], [ 140,  140,  140, +140, +160]),
+          (math.pi / 2.0, [1, 1, 1], [ 100, +100, +120,  180,  180, +180]),
+      ],
+      # distance each line is offset, screen units
+      'line_spacing': 5,
+      # distance along each line for intensity changes, screen units
+      'line_res': 1.5,
+      # distance between the onion layers, screen units
+      'level_spacing': 0.8,
+    },
 
-extra_fine_overlay = {
-  # all waves that should be in this overlay
-  'waves': [
-      # [angle, pens, thresholds]
-      (math.pi / 4.0, [1],                [ +80]),
-      (0,             [1, 1],    [ +140, +160]),
-      (math.pi / 2.0, [1, 1, 1], [ +100, +120, +180]),
-  ],
-  # distance each line is offset, screen units
-  'line_spacing': 2.75,
-  # distance along each line for intensity changes, screen units
-  'line_res': 1,
-  # distance between the onion layers, screen units
-  'level_spacing': 0.8,
-}
+    'marker': {
+      # all waves that should be in this overlay
+      'waves': [
+          # [angle, pens, thresholds]
+          (math.pi / 4.0, [1],    [+80]),
+          (0,             [2],    [+140, +160]),
+          (math.pi / 2.0, [3, 4], [+100, +120, +180]),
+      ],
+      # distance each line is offset, screen units
+      'line_spacing': 5,
+      # distance along each line for intensity changes, screen units
+      'line_res': 2,
+      # distance between the onion layers, screen units
+      'level_spacing': 1.5,
+    },
+  }
 
-fine_overlay = {
-  # all waves that should be in this overlay
-  'waves': [
-      # [angle, pens, thresholds]
-      (math.pi / 4.0, [1],                [ +80]),
-      (0,             [1, 1, 1, 1, 1],    [ 140,  140,  140, +140, +160]),
-      (math.pi / 2.0, [1, 1, 1, 1, 1, 1], [ 100, +100, +120,  180,  180, +180]),
-  ],
-  # distance each line is offset, screen units
-  'line_spacing': 5,
-  # distance along each line for intensity changes, screen units
-  'line_res': 1.5,
-  # distance between the onion layers, screen units
-  'level_spacing': 0.8,
-}
-
-marker_overlay = {
-  # all waves that should be in this overlay
-  'waves': [
-      # [angle, pens, thresholds]
-      (math.pi / 4.0, [1],       [+80]),
-      (0,             [1, 2],    [+140, +160]),
-      (math.pi / 2.0, [2, 3, 4], [+100, +120, +180]),
-  ],
-  # distance each line is offset, screen units
-  'line_spacing': 7.75,
-  # distance along each line for intensity changes, screen units
-  'line_res': 3,
-  # distance between the onion layers, screen units
-  'level_spacing': 1.5,
-}
-
-
-draw_overlay(extra_fine_overlay)
+  draw_waves(wave_specs[args.spec])
 
 dxf.footer(dxfname)
 
