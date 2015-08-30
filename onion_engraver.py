@@ -32,7 +32,7 @@ import argparse
 parser = argparse.ArgumentParser(description='Create a halftone using nested parallel lines.')
 parser.add_argument('--img', help='image file to process', default='image.jpg')
 parser.add_argument('--method', help='method to use', default='wave')
-parser.add_argument('--spec', help='spec to use', default='extra_fine')
+parser.add_argument('--spec', help='spec to use', default=None)
 parser.add_argument('--loops', help='merge the sides of the loops', default=False, action='store_true')
 args = parser.parse_args()
 
@@ -140,7 +140,7 @@ def level_line(pen, step, x1, o1, y1, x2, o2, y2, points1=None):
 
 # thresholds needs to be sorted lowest to highest
 # pens and thresholds need to tbe same length
-def do_a_line(w, level_step, pens, thresholds):
+def do_a_path(w, level_step, pens, thresholds):
    try:
       last_pass_o = {}
       last_pass_points = {}
@@ -225,123 +225,188 @@ class wave_path:
       #print "i=%d, x,y=%d,%d" % (self.i, x, y)
       return (x, y)
 
-#dxf.circle(0,-0,3,pen=6)
-#dxf.circle(screen_width,-screen_height,3,pen=7)
+def draw_waves(spec, period=50, amplitude=20):
+  print 'spec = %s' % spec
 
-if args.method == 'wave':
-  wave_specs = {
-    'extra_fine': {
-      # all waves that should be in this overlay
-      'waves': [
-          # [angle, pens, thresholds]
-          (math.pi / 4.0, [1],       [ +80]),
-          (0,             [1],       [ +140, +160]),
-          (math.pi / 2.0, [1, 1], [ +100, +120, +180]),
-      ],
-      # distance each line is offset, screen units
-      'line_spacing': 2.75,
-      # distance along each line for intensity changes, screen units
-      'line_res': 1,
-      # distance between the onion layers, screen units
-      'level_spacing': 0.8,
-    },
-  
-    'fine': {
-      # all waves that should be in this overlay
-      'waves': [
-          # [angle, pens, thresholds]
-          (math.pi / 4.0, [1],       [ +80]),
-          (0,             [1, 1, 1], [ 140,  140,  140, +140, +160]),
-          (math.pi / 2.0, [1, 1, 1], [ 100, +100, +120,  180,  180, +180]),
-      ],
-      # distance each line is offset, screen units
-      'line_spacing': 5,
-      # distance along each line for intensity changes, screen units
-      'line_res': 1.5,
-      # distance between the onion layers, screen units
-      'level_spacing': 0.8,
-    },
+  line_length = math.sqrt(screen_width * screen_width + screen_height * screen_height)
+  x_count = int(line_length / float(spec['line_spacing']))
 
-    'marker': {
-      # all waves that should be in this overlay
-      'waves': [
-          # [angle, pens, thresholds]
-          (math.pi / 4.0, [1],    [+80]),
-          (0,             [2],    [+140, +160]),
-          (math.pi / 2.0, [3, 4], [+100, +120, +180]),
-      ],
-      # distance each line is offset, screen units
-      'line_spacing': 5,
-      # distance along each line for intensity changes, screen units
-      'line_res': 2,
-      # distance between the onion layers, screen units
-      'level_spacing': 1.5,
-    },
-  }
+  print 'x_count = %d' % x_count
 
-  def draw_waves(spec, period=50, amplitude=20):
-    print 'spec = %s' % spec
+  for wave in spec['waves']:
+     print('wave %s' % str(wave))
+     for i in xrange(x_count):
+        w = wave_path(screen_width / 2.0, screen_height / 2.0,
+                      offset = (i + 0.5 - x_count / 2.0) * spec['line_spacing'],
+                      angle = wave[0],
+                      step=spec['line_res'] / 2.0, length=line_length,
+                      period=period, amplitude=amplitude)
+        do_a_path(w, spec['level_spacing'], wave[1], wave[2])
 
-    line_length = math.sqrt(screen_width * screen_width + screen_height * screen_height)
-    x_count = int(line_length / float(spec['line_spacing']))
-
-    print 'x_count = %d' % x_count
-
-    for wave in spec['waves']:
-       print('wave %s' % str(wave))
-       for i in xrange(x_count):
-          w = wave_path(screen_width / 2.0, screen_height / 2.0,
-                        offset = (i + 0.5 - x_count / 2.0) * spec['line_spacing'],
-                        angle = wave[0],
-                        step=spec['line_res'] / 2.0, length=line_length,
-                        period=period, amplitude=amplitude)
-          do_a_line(w, spec['level_spacing'], wave[1], wave[2])
-
-  draw_waves(wave_specs[args.spec])
+def polar_x_y(a,r):
+  return (r * math.sin(a), r * math.cos(a))
 
 class circle_involute_path:
-   def __init__(self, x_center, y_center, r=1, step=1, end_r=10):
-      self.t0 = 0.0
-      self.a = float(r) / (math.sqrt(1 + 4 * math.pi * math.pi) - 1)
-      self.step = float(step)
-      self.end_r2 = end_r * end_r
-      self.x_center = x_center
-      self.y_center = y_center
+  def __init__(self, x_center, y_center, r=1, step=1, end_r=10):
+    self.t0 = 0.0
+    self.a = float(r) / (math.sqrt(1 + 4 * math.pi * math.pi) - 1)
+    self.step = float(step)
+    self.end_r2 = end_r * end_r
+    self.x_center = x_center
+    self.y_center = y_center
 
-   def __iter__(self):
-      return self
+  def __iter__(self):
+    return self
 
-   def next(self):
-      t1 = math.sqrt(2.0 * self.step / self.a + self.t0 * self.t0)
-      x = self.a * (math.cos(t1) + t1 * math.sin(t1))
-      y = self.a * (math.sin(t1) - t1 * math.cos(t1))
-      if x * x + y * y > self.end_r2:
-         raise StopIteration()
-      self.t0 = t1
-      return (x + self.x_center, y + self.y_center)
+  def next(self):
+    t1 = math.sqrt(2.0 * self.step / self.a + self.t0 * self.t0)
+    x = self.a * (math.cos(t1) + t1 * math.sin(t1))
+    y = self.a * (math.sin(t1) - t1 * math.cos(t1))
+    if x * x + y * y > self.end_r2:
+       raise StopIteration()
+    self.t0 = t1
+    return (x + self.x_center, y + self.y_center)
 
-if args.method == 'circle_involute':
-
-  spec = {
-      'line_spacing': 4.5,
-      'level_spacing': 0.8,
-      'line_res': 1.0,
-      'paths': [
-          # [offset, pens, thresholds]
-          ((0, 0), [1, 1, 1], [+80, +100, +120, +140, +160, +180]),
-      ],
-  }
-
-  end_r = math.sqrt(screen_width * screen_width + screen_height * screen_height) / 2.0
+def draw_circle_involute(spec):
+  end_r = (math.sqrt(screen_width * screen_width + screen_height * screen_height) /
+           2.0 * spec.get('extra_end_r', 1.0))
 
   for path in spec['paths']:
     print('path %s' % str(path))
-    p = circle_involute_path(screen_width / 2.0, screen_height / 2.0,
+    p = circle_involute_path(screen_width / 2.0 + path[0][0],
+                             screen_height / 2.0 + path[0][1],
                              r=spec['line_spacing'],
                              step=spec['line_res'], end_r=end_r)
-    do_a_line(p, spec['level_spacing'], path[1], [255 - i for i in path[2]])
+    do_a_path(p, spec['level_spacing'], path[1], path[2])
 
+methods = {
+    'waves': {
+        'draw': draw_waves,
+        'default_spec': 'extra_fine',
+        'specs': {
+            'extra_fine': {
+                # all waves that should be in this overlay
+                'waves': [
+                    # [angle, pens, thresholds]
+                    (math.pi / 4.0, [1],       [ +80]),
+                    (0,             [1],       [ +140, +160]),
+                    (math.pi / 2.0, [1, 1], [ +100, +120, +180]),
+                ],
+                # distance each line is offset, screen units
+                'line_spacing': 2.75,
+                # distance along each line for intensity changes, screen units
+                'line_res': 1,
+                # distance between the onion layers, screen units
+                'level_spacing': 0.8,
+            },
+            'fine': {
+                # all waves that should be in this overlay
+                'waves': [
+                    # [angle, pens, thresholds]
+                    (math.pi / 4.0, [1],       [ +80]),
+                    (0,             [1, 1, 1], [ 140,  140,  140, +140, +160]),
+                    (math.pi / 2.0, [1, 1, 1], [ 100, +100, +120,  180,  180, +180]),
+                ],
+                # distance each line is offset, screen units
+                'line_spacing': 5,
+                # distance along each line for intensity changes, screen units
+                'line_res': 1.5,
+                # distance between the onion layers, screen units
+                'level_spacing': 0.8,
+            },
+            'marker': {
+                # all waves that should be in this overlay
+                'waves': [
+                    # [angle, pens, thresholds]
+                    (math.pi / 4.0, [1],    [+80]),
+                    (0,             [2],    [+140, +160]),
+                    (math.pi / 2.0, [3, 4], [+100, +120, +180]),
+                ],
+                # distance each line is offset, screen units
+                'line_spacing': 5,
+                # distance along each line for intensity changes, screen units
+                'line_res': 2,
+                # distance between the onion layers, screen units
+                'level_spacing': 1.5,
+            },
+        },
+    },
+    'circle_involute': {
+        'draw': draw_circle_involute,
+        'default_spec': '1+6',
+        'specs': {
+            '1+6': {
+                'line_spacing': 5.0,
+                'level_spacing': 0.8,
+                'line_res': 1.0,
+                'paths': [
+                    # [offset, pens, thresholds]
+                    ((0, 0), [1, 1, 1], [+80, +100, +120, +140, +160, +180]),
+                ],
+             },
+            '1+6+all': {
+                'line_spacing': 5.0,
+                'level_spacing': 0.8,
+                'line_res': 1.0,
+                'paths': [
+                    # [offset, pens, thresholds]
+                    ((0, 0), [1, 1, 1, 1], [0, +80, +100, +120, +140, +160, +180]),
+                ],
+             },
+             '6+1': {
+                'line_spacing': 3.0,
+                'level_spacing': 0.8,
+                'line_res': 1.0,
+                'extra_end_r': 2.0,
+                'paths': [
+                    # [offset, pens, thresholds]
+                    ((0, 0),                          [1], [+80]),
+                    (polar_x_y(0*math.pi/2.5, 40*3.0), [1], [+100]),
+                    (polar_x_y(1*math.pi/2.5, 40*3.0), [1], [+120]),
+                    (polar_x_y(2*math.pi/2.5, 40*3.0), [1], [+140]),
+                    (polar_x_y(3*math.pi/2.5, 40*3.0), [1], [+160]),
+                    (polar_x_y(4*math.pi/2.5, 40*3.0), [1], [+180]),
+                ],
+             },
+             '6+1+all': {
+                'line_spacing': 3.0,
+                'level_spacing': 0.8,
+                'line_res': 1.0,
+                'extra_end_r': 2.0,
+                'paths': [
+                    # [offset, pens, thresholds]
+                    ((0, 0),                          [1], [0, +80]),
+                    (polar_x_y(0*math.pi/2.5, 40*3.0), [1], [0, +100]),
+                    (polar_x_y(1*math.pi/2.5, 40*3.0), [1], [0, +120]),
+                    (polar_x_y(2*math.pi/2.5, 40*3.0), [1], [0, +140]),
+                    (polar_x_y(3*math.pi/2.5, 40*3.0), [1], [0, +160]),
+                    (polar_x_y(4*math.pi/2.5, 40*3.0), [1], [0, +180]),
+                ],
+             },
+        },
+    },
+}
 
+if args.method not in methods:
+  print('method "%s" is not known' % args.method)
+  sys.exit(1)
+
+method = methods[args.method]
+
+spec_name = args.spec
+if not args.spec:
+  spec_name = method.get('default_spec', 'default')
+
+if args.spec not in method['specs']:
+  print('spec "%s" is not known in method "%s"' % (args.spec, args.method))
+  sys.exit(1)
+
+spec = method['specs'][spec_name]
+
+#dxf.circle(0,-0,3,pen=6)
+#dxf.circle(screen_width,-screen_height,3,pen=7)
+
+method['draw'](spec)
 
 dxf.footer(dxfname)
 
