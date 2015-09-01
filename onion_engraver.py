@@ -31,7 +31,7 @@ import argparse
 
 parser = argparse.ArgumentParser(description='Create a halftone using nested parallel lines.')
 parser.add_argument('--img', help='image file to process', default='image.jpg')
-parser.add_argument('--method', help='method to use', default='wave')
+parser.add_argument('--method', help='method to use', default='waves')
 parser.add_argument('--spec', help='spec to use', default=None)
 parser.add_argument('--loops', help='merge the sides of the loops', default=False, action='store_true')
 args = parser.parse_args()
@@ -86,7 +86,7 @@ def offset_line_end1(x1, y1, x2, y2, offset):
     dy /= length
     return (x1 - dx * offset, y1 - dy * offset)
 
-def level_line(pen, step, x1, o1, y1, x2, o2, y2, points1=None):
+def level_line(pen1, pen2, step, x1, o1, y1, x2, o2, y2, points1=None):
    # normal vector nx.ny
    nx = y2 - y1
    ny = x2 - x1
@@ -108,12 +108,13 @@ def level_line(pen, step, x1, o1, y1, x2, o2, y2, points1=None):
       xo1 = points1[0][0]
       yo1 = points1[0][1]
 
-   if args.loops or not center_start or o2 == 0:
-      dxf.line(xo1, -yo1, xo2, -yo2, pen=pen)
-   else:
-       # if we are skipping loops then clip the line a little
-      (x_offset, y_offset) = offset_line_end1(xo1, yo1, xo2, yo2, back_off)
-      dxf.line(x_offset, -y_offset, xo2, -yo2, pen=pen)
+   if pen1 is not None:
+      if args.loops or not center_start or o2 == 0:
+         dxf.line(xo1, -yo1, xo2, -yo2, pen=pen1)
+      else:
+          # if we are skipping loops then clip the line a little
+         (x_offset, y_offset) = offset_line_end1(xo1, yo1, xo2, yo2, back_off)
+         dxf.line(x_offset, -y_offset, xo2, -yo2, pen=pen1)
    result = [[xo2, yo2]]
 
    # draw left side if it is different than right
@@ -127,12 +128,13 @@ def level_line(pen, step, x1, o1, y1, x2, o2, y2, points1=None):
          xo1 = points1[1][0]
          yo1 = points1[1][1]
 
-      if args.loops or not center_line or o1 == 0:
-         dxf.line(xo1, -yo1, xo2, -yo2, pen=pen)
-      else:
-         # if we are skipping loops then clip the line a little
-         (x_offset, y_offset) = offset_line_end1(xo2, yo2, xo1, yo1, back_off)
-         dxf.line(xo1, -yo1, x_offset, -y_offset, pen=pen)
+      if pen2 is not None:
+         if args.loops or not center_line or o1 == 0:
+            dxf.line(xo1, -yo1, xo2, -yo2, pen=pen2)
+         else:
+            # if we are skipping loops then clip the line a little
+            (x_offset, y_offset) = offset_line_end1(xo2, yo2, xo1, yo1, back_off)
+            dxf.line(xo1, -yo1, x_offset, -y_offset, pen=pen2)
 
    # either different left side or same as right
    result.append([xo2, yo2])
@@ -141,6 +143,7 @@ def level_line(pen, step, x1, o1, y1, x2, o2, y2, points1=None):
 # thresholds needs to be sorted lowest to highest
 # pens and thresholds need to tbe same length
 def do_a_path(w, level_step, pens, thresholds):
+   assert len(pens) == len(thresholds), 'lens and thresholds must have the same element count'
    try:
       last_pass_o = {}
       last_pass_points = {}
@@ -169,27 +172,36 @@ def do_a_path(w, level_step, pens, thresholds):
             this_pass_o[j] = (l - j - 1) * level_step + even_offset
 
          for this_l, this_o in this_pass_o.items():
-            pen = pens[this_l]
+            pen1 = pens[this_l * 2]
+            pen2 = None
+            if this_o > 0:
+               pen2 = pens[this_l * 2 + 1]
             if this_l in last_pass_o:
                # continue this level from last
                last_o = last_pass_o[this_l]
-               this_points = level_line(pen, level_step, x0, last_o, y0, x1, this_o, y1, points1=last_pass_points[this_l])
+               if not pen2 and last_o > 0:
+                  pen2 = pens[this_l * 2 + 1]
+               this_points = level_line(pen1, pen2, level_step, x0, last_o, y0, x1, this_o, y1, points1=last_pass_points[this_l])
             elif this_l == 0:
                # layer 0 continues from 0, y0
                last_o = 0
-               this_points = level_line(pen, level_step, x0, last_o, y0, x1, this_o, y1)
+               this_points = level_line(pen1, pen2, level_step, x0, last_o, y0, x1, this_o, y1)
             else:
                this_points = None
             # all layers go from y1 to y2
-            this_points = level_line(pen, level_step, x1, this_o, y1, x2, this_o, y2, points1=this_points)
+            this_points = level_line(pen1, pen2, level_step, x1, this_o, y1, x2, this_o, y2, points1=this_points)
+
             this_pass_points[this_l] = this_points
 
          if l == 0 and 0 in last_pass_o:
             # we end so close an open 0
-            pen = pens[l]
-            last_o = last_pass_o[0]
             this_o = 0
-            level_line(pen, level_step, x0, last_o, y0, x1, this_o, y1, points1=last_pass_points[0])
+            pen1 = pens[0]
+            last_o = last_pass_o[0]
+            pen2 = None
+            if last_o > 0:
+               pen2 = pens[1]
+            level_line(pen1, pen2, level_step, x0, last_o, y0, x1, this_o, y1, points1=last_pass_points[0])
 
          last_pass_o = this_pass_o
          last_pass_points = this_pass_points
@@ -218,15 +230,20 @@ class wave_path:
       if self.i >= self.length / 2.0:
          raise StopIteration()
 
-      o = math.sin(self.i / self.period) * self.amplitude
+      o = 0
+      if self.period:
+         o = math.sin(self.i / self.period) * self.amplitude
       x = self.x + self.dx * self.i - o * self.dy
       y = self.y + self.dy * self.i + o * self.dx
       self.i += self.step
       #print "i=%d, x,y=%d,%d" % (self.i, x, y)
       return (x, y)
 
-def draw_waves(spec, period=50, amplitude=20):
+def draw_waves(spec):
   print 'spec = %s' % spec
+
+  period = spec.get('period', 50)
+  amplitude = spec.get('amplitude', 20)
 
   line_length = math.sqrt(screen_width * screen_width + screen_height * screen_height)
   x_count = int(line_length / float(spec['line_spacing']))
@@ -288,9 +305,9 @@ methods = {
                 # all waves that should be in this overlay
                 'waves': [
                     # [angle, pens, thresholds]
-                    (math.pi / 4.0, [1],       [ +80]),
-                    (0,             [1],       [ +140, +160]),
-                    (math.pi / 2.0, [1, 1], [ +100, +120, +180]),
+                    (math.pi / 4.0, [1],     [ +80]),
+                    (0,             [1] * 2, [ +140, +160]),
+                    (math.pi / 2.0, [1] * 3, [ +100, +120, +180]),
                 ],
                 # distance each line is offset, screen units
                 'line_spacing': 2.75,
@@ -303,9 +320,9 @@ methods = {
                 # all waves that should be in this overlay
                 'waves': [
                     # [angle, pens, thresholds]
-                    (math.pi / 4.0, [1],       [ +80]),
-                    (0,             [1, 1, 1], [ 140,  140,  140, +140, +160]),
-                    (math.pi / 2.0, [1, 1, 1], [ 100, +100, +120,  180,  180, +180]),
+                    (math.pi / 4.0, [1],     [ +80]),
+                    (0,             [1] * 5, [ 140,  140,  140, +140, +160]),
+                    (math.pi / 2.0, [1] * 6, [ 100, +100, +120,  180,  180, +180]),
                 ],
                 # distance each line is offset, screen units
                 'line_spacing': 5,
@@ -318,9 +335,9 @@ methods = {
                 # all waves that should be in this overlay
                 'waves': [
                     # [angle, pens, thresholds]
-                    (math.pi / 4.0, [1],    [+80]),
-                    (0,             [2],    [+140, +160]),
-                    (math.pi / 2.0, [3, 4], [+100, +120, +180]),
+                    (math.pi / 4.0, [1],       [+80]),
+                    (0,             [2, 2],    [+140, +160]),
+                    (math.pi / 2.0, [3, 3, 4], [+100, +120, +180]),
                 ],
                 # distance each line is offset, screen units
                 'line_spacing': 5,
@@ -329,6 +346,18 @@ methods = {
                 # distance between the onion layers, screen units
                 'level_spacing': 1.5,
             },
+            'moire': {
+                'line_spacing': 2.0,
+                'level_spacing': 0.15,
+                'line_res': 1.0,
+                'period': 0,
+                'amplitude': 0,
+                'waves': [
+                    # [angle, pens, thresholds]
+                    (0,    [1], [0]),
+                    (0.05, [1, None, None, None, None, None, None], [0, +80, +100, +120, +140, +160, +180]),
+                ],
+             },
         },
     },
     'circle_involute': {
@@ -341,48 +370,48 @@ methods = {
                 'line_res': 1.0,
                 'paths': [
                     # [offset, pens, thresholds]
-                    ((0, 0), [1, 1, 1], [+80, +100, +120, +140, +160, +180]),
+                    ((0, 0), [1] * 6, [+80, +100, +120, +140, +160, +180]),
                 ],
-             },
+            },
             '1+6+all': {
                 'line_spacing': 5.0,
                 'level_spacing': 0.8,
                 'line_res': 1.0,
                 'paths': [
                     # [offset, pens, thresholds]
-                    ((0, 0), [1, 1, 1, 1], [0, +80, +100, +120, +140, +160, +180]),
+                    ((0, 0), [1] * 7, [0, +80, +100, +120, +140, +160, +180]),
                 ],
-             },
-             '6+1': {
+            },
+            '6+1': {
                 'line_spacing': 3.0,
                 'level_spacing': 0.8,
                 'line_res': 1.0,
                 'extra_end_r': 2.0,
                 'paths': [
                     # [offset, pens, thresholds]
-                    ((0, 0),                          [1], [+80]),
+                    ((0, 0),                           [1], [+80]),
                     (polar_x_y(0*math.pi/2.5, 40*3.0), [1], [+100]),
                     (polar_x_y(1*math.pi/2.5, 40*3.0), [1], [+120]),
                     (polar_x_y(2*math.pi/2.5, 40*3.0), [1], [+140]),
                     (polar_x_y(3*math.pi/2.5, 40*3.0), [1], [+160]),
                     (polar_x_y(4*math.pi/2.5, 40*3.0), [1], [+180]),
                 ],
-             },
-             '6+1+all': {
+            },
+            '6+1+all': {
                 'line_spacing': 3.0,
                 'level_spacing': 0.8,
                 'line_res': 1.0,
                 'extra_end_r': 2.0,
                 'paths': [
                     # [offset, pens, thresholds]
-                    ((0, 0),                          [1], [0, +80]),
-                    (polar_x_y(0*math.pi/2.5, 40*3.0), [1], [0, +100]),
-                    (polar_x_y(1*math.pi/2.5, 40*3.0), [1], [0, +120]),
-                    (polar_x_y(2*math.pi/2.5, 40*3.0), [1], [0, +140]),
-                    (polar_x_y(3*math.pi/2.5, 40*3.0), [1], [0, +160]),
-                    (polar_x_y(4*math.pi/2.5, 40*3.0), [1], [0, +180]),
+                    ((0, 0),                           [1, 1], [0, +80]),
+                    (polar_x_y(0*math.pi/2.5, 40*3.0), [1, 1], [0, +100]),
+                    (polar_x_y(1*math.pi/2.5, 40*3.0), [1, 1], [0, +120]),
+                    (polar_x_y(2*math.pi/2.5, 40*3.0), [1, 1], [0, +140]),
+                    (polar_x_y(3*math.pi/2.5, 40*3.0), [1, 1], [0, +160]),
+                    (polar_x_y(4*math.pi/2.5, 40*3.0), [1, 1], [0, +180]),
                 ],
-             },
+            },
         },
     },
 }
