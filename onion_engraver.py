@@ -423,10 +423,10 @@ if args.method not in methods:
 method = methods[args.method]
 
 spec_name = args.spec
-if not args.spec:
+if not spec_name:
   spec_name = method.get('default_spec', 'default')
 
-if args.spec not in method['specs']:
+if spec_name not in method['specs']:
   print('spec "%s" is not known in method "%s"' % (args.spec, args.method))
   sys.exit(1)
 
