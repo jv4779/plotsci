@@ -50,15 +50,27 @@ class PlotDxf():
 
   def line(self, x1, y1, x2, y2, pen=1, **kwargs):
     # pen maps to a specific layer
-    self.dxf.append(sdxf.Line(
+    l = sdxf.Line(
         points=[(x1, y1), (x2, y2)], layer=pen, **kwargs
-    ))
+    )
+    self.dxf.append(l)
+    return l
+
+  def polyline(self, x1, y1, x2, y2, pen=1, **kwargs):
+    # pen maps to a specific layer
+    pl = sdxf.LwPolyLine(
+        points=[(x1, y1), (x2, y2)], layer=pen, **kwargs
+    )
+    self.dxf.append(pl)
+    return pl
 
   def circle(self, x, y, r, pen=1, **kwargs):
     # pen maps to a specific layer
-    self.dxf.append(sdxf.Circle(
+    c = sdxf.Circle(
         center=(x, y), radius=r, layer=pen, **kwargs
-    ))
+    )
+    self.dxf.append(c)
+    return c
 
   def footer(self, filename):
     self.dxf.saveas(filename)

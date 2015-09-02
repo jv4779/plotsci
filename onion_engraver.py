@@ -99,25 +99,30 @@ def level_line(pen1, pen2, step, x1, o1, y1, x2, o2, y2, points1=None):
    center_line = (o1 == 0 or o2 == 0)
 
    # draw right side
+   prev_line1 = None
    xo1 = x1 + o1 * nx
    yo1 = y1 - o1 * ny
    xo2 = x2 + o2 * nx
    yo2 = y2 - o2 * ny
 
    if points1:
+      prev_line1 = points1[0][2]
       xo1 = points1[0][0]
       yo1 = points1[0][1]
 
    if pen1 is not None:
       if args.loops or not center_start or o2 == 0:
-         dxf.line(xo1, -yo1, xo2, -yo2, pen=pen1)
+         dxf.polyline(xo1, -yo1, xo2, -yo2, pen=pen1)
       else:
           # if we are skipping loops then clip the line a little
          (x_offset, y_offset) = offset_line_end1(xo1, yo1, xo2, yo2, back_off)
-         dxf.line(x_offset, -y_offset, xo2, -yo2, pen=pen1)
-   result = [[xo2, yo2]]
+         dxf.polyline(x_offset, -y_offset, xo2, -yo2, pen=pen1)
+   else:
+     prev_line1 = None
+   result = [[xo2, yo2, prev_line1]]
 
    # draw left side if it is different than right
+   prev_line2 = None
    if o1 > 0 or o2 > 0:
       xo1 = x1 - o1 * nx
       yo1 = y1 + o1 * ny
@@ -125,19 +130,20 @@ def level_line(pen1, pen2, step, x1, o1, y1, x2, o2, y2, points1=None):
       yo2 = y2 + o2 * ny
 
       if points1:
+         prev_line2 = points1[1][2]
          xo1 = points1[1][0]
          yo1 = points1[1][1]
 
       if pen2 is not None:
          if args.loops or not center_line or o1 == 0:
-            dxf.line(xo1, -yo1, xo2, -yo2, pen=pen2)
+            dxf.polyline(xo1, -yo1, xo2, -yo2, pen=pen2)
          else:
             # if we are skipping loops then clip the line a little
             (x_offset, y_offset) = offset_line_end1(xo2, yo2, xo1, yo1, back_off)
-            dxf.line(xo1, -yo1, x_offset, -y_offset, pen=pen2)
+            dxf.polyline(xo1, -yo1, x_offset, -y_offset, pen=pen2)
 
    # either different left side or same as right
-   result.append([xo2, yo2])
+   result.append([xo2, yo2, prev_line2])
    return result
 
 # thresholds needs to be sorted lowest to highest
@@ -348,14 +354,14 @@ methods = {
             },
             'moire': {
                 'line_spacing': 2.0,
-                'level_spacing': 0.15,
+                'level_spacing': 0.3,
                 'line_res': 1.0,
                 'period': 0,
                 'amplitude': 0,
                 'waves': [
                     # [angle, pens, thresholds]
-                    (0,    [1], [0]),
-                    (0.05, [1, None, None, None, None, None, None], [0, +80, +100, +120, +140, +160, +180]),
+                    (-0.05, [1], [0]),
+                    (0.05,  [1] + [None] * 6, [0, +80, +100, +120, +140, +160, +180]),
                 ],
              },
         },
