@@ -34,17 +34,18 @@ parser.add_argument('--img', help='image file to process', default='image.jpg')
 parser.add_argument('--method', help='method to use', default='waves')
 parser.add_argument('--spec', help='spec to use', default=None)
 parser.add_argument('--loops', help='merge the sides of the loops', default=False, action='store_true')
+parser.add_argument('--rotate', help='degrees to rotate pattern', default=0)
+parser.add_argument('--pen', help='default pen number', default=1)
 args = parser.parse_args()
 
 imagename = args.img
+default_pen = int(args.pen)
 
 dxfname = imagename[0:imagename.rfind (".")]+".dxf"
 
 dxf = plot_dxf.PlotDxf()
 
-im = Image.open(imagename).convert("L")
-
-pix = im.load()
+im = Image.open(imagename)
 image_width = float(im.size[0]);
 image_height = float(im.size[1]);
 screen_width = 800
@@ -64,7 +65,7 @@ def sytoiy(sy):
 #  -1 for out of bounds
 #  0 for lightest
 #  255 for darkest
-def sampleimg(sx, sy):
+def sampleimg(pix, sx, sy):
    ix = sxtoix(sx)
    iy = sytoiy(sy)
    if ix < 0:
@@ -112,18 +113,23 @@ def level_line(pen1, pen2, step, x1, o1, y1, x2, o2, y2, points1=None):
 
    if pen1 is not None:
       if args.loops or not center_start or o2 == 0:
-         dxf.polyline(xo1, -yo1, xo2, -yo2, pen=pen1)
+         # try and extend an existing line
+         if prev_line1:
+            prev_line1.points.append((xo2, -yo2))
+         else:
+            prev_line1 = dxf.polyline(xo1, -yo1, xo2, -yo2, pen=pen1)
       else:
-          # if we are skipping loops then clip the line a little
+         # if we are skipping loops then clip the line a little, starting a
+         # a new line
          (x_offset, y_offset) = offset_line_end1(xo1, yo1, xo2, yo2, back_off)
-         dxf.polyline(x_offset, -y_offset, xo2, -yo2, pen=pen1)
+         prev_line1 = dxf.polyline(x_offset, -y_offset, xo2, -yo2, pen=pen1)
    else:
      prev_line1 = None
    result = [[xo2, yo2, prev_line1]]
 
    # draw left side if it is different than right
-   prev_line2 = None
    if o1 > 0 or o2 > 0:
+      prev_line2 = None
       xo1 = x1 - o1 * nx
       yo1 = y1 + o1 * ny
       xo2 = x2 - o2 * nx
@@ -136,11 +142,25 @@ def level_line(pen1, pen2, step, x1, o1, y1, x2, o2, y2, points1=None):
 
       if pen2 is not None:
          if args.loops or not center_line or o1 == 0:
-            dxf.polyline(xo1, -yo1, xo2, -yo2, pen=pen2)
+            # try and extend an existing line
+            if prev_line2:
+               prev_line2.points.append((xo2, -yo2))
+            else:
+               prev_line2 = dxf.polyline(xo1, -yo1, xo2, -yo2, pen=pen2)
          else:
             # if we are skipping loops then clip the line a little
             (x_offset, y_offset) = offset_line_end1(xo2, yo2, xo1, yo1, back_off)
-            dxf.polyline(xo1, -yo1, x_offset, -y_offset, pen=pen2)
+            if prev_line2:
+               # we are breaking this line, so extend it and no prev
+               prev_line2.points.append((x_offset, -y_offset))
+            else:
+               dxf.polyline(xo1, -yo1, x_offset, -y_offset, pen=pen2)
+            # since this is broken there is no prev
+            prev_line2 = None
+   else:
+      # a single line in the middle, same xo2, xo2, and prev_line
+      prev_line2 = prev_line1
+
 
    # either different left side or same as right
    result.append([xo2, yo2, prev_line2])
@@ -148,7 +168,7 @@ def level_line(pen1, pen2, step, x1, o1, y1, x2, o2, y2, points1=None):
 
 # thresholds needs to be sorted lowest to highest
 # pens and thresholds need to tbe same length
-def do_a_path(w, level_step, pens, thresholds):
+def do_a_path(w, pix, level_step, pens, thresholds):
    assert len(pens) == len(thresholds), 'lens and thresholds must have the same element count'
    try:
       last_pass_o = {}
@@ -159,7 +179,7 @@ def do_a_path(w, level_step, pens, thresholds):
          (x1, y1) = w.next()
          (x2, y2) = w.next()
 
-         s = sampleimg(x1, y1)
+         s = sampleimg(pix, x1, y1)
 
          l = 0;
          for t in thresholds:
@@ -245,9 +265,9 @@ class wave_path:
       #print "i=%d, x,y=%d,%d" % (self.i, x, y)
       return (x, y)
 
-def draw_waves(spec):
+def draw_waves(pix, spec):
   print 'spec = %s' % spec
-
+  a = float(args.rotate) / 180.0 * math.pi
   period = spec.get('period', 50)
   amplitude = spec.get('amplitude', 20)
 
@@ -258,13 +278,17 @@ def draw_waves(spec):
 
   for wave in spec['waves']:
      print('wave %s' % str(wave))
+     try:
+        channel = wave[3]
+     except IndexError:
+        channel = 0
      for i in xrange(x_count):
         w = wave_path(screen_width / 2.0, screen_height / 2.0,
                       offset = (i + 0.5 - x_count / 2.0) * spec['line_spacing'],
-                      angle = wave[0],
+                      angle = wave[0] + a,
                       step=spec['line_res'] / 2.0, length=line_length,
                       period=period, amplitude=amplitude)
-        do_a_path(w, spec['level_spacing'], wave[1], wave[2])
+        do_a_path(w, pix[channel], spec['level_spacing'], wave[1], wave[2])
 
 def polar_x_y(a,r):
   return (r * math.sin(a), r * math.cos(a))
@@ -290,7 +314,7 @@ class circle_involute_path:
     self.t0 = t1
     return (x + self.x_center, y + self.y_center)
 
-def draw_circle_involute(spec):
+def draw_circle_involute(pix, spec):
   end_r = (math.sqrt(screen_width * screen_width + screen_height * screen_height) /
            2.0 * spec.get('extra_end_r', 1.0))
 
@@ -300,7 +324,7 @@ def draw_circle_involute(spec):
                              screen_height / 2.0 + path[0][1],
                              r=spec['line_spacing'],
                              step=spec['line_res'], end_r=end_r)
-    do_a_path(p, spec['level_spacing'], path[1], path[2])
+    do_a_path(p, pix[0], spec['level_spacing'], path[1], path[2])
 
 methods = {
     'waves': {
@@ -311,9 +335,9 @@ methods = {
                 # all waves that should be in this overlay
                 'waves': [
                     # [angle, pens, thresholds]
-                    (math.pi / 4.0, [1],     [ +80]),
-                    (0,             [1] * 2, [ +140, +160]),
-                    (math.pi / 2.0, [1] * 3, [ +100, +120, +180]),
+                    (math.pi / 4.0, [default_pen],     [ +80]),
+                    (0,             [default_pen] * 2, [ +140, +160]),
+                    (math.pi / 2.0, [default_pen] * 3, [ +100, +120, +180]),
                 ],
                 # distance each line is offset, screen units
                 'line_spacing': 2.75,
@@ -326,9 +350,9 @@ methods = {
                 # all waves that should be in this overlay
                 'waves': [
                     # [angle, pens, thresholds]
-                    (math.pi / 4.0, [1],     [ +80]),
-                    (0,             [1] * 5, [ 140,  140,  140, +140, +160]),
-                    (math.pi / 2.0, [1] * 6, [ 100, +100, +120,  180,  180, +180]),
+                    (math.pi / 4.0, [default_pen],     [ +80]),
+                    (0,             [default_pen] * 5, [ 140,  140,  140, +140, +160]),
+                    (math.pi / 2.0, [default_pen] * 6, [ 100, +100, +120,  180,  180, +180]),
                 ],
                 # distance each line is offset, screen units
                 'line_spacing': 5,
@@ -341,16 +365,16 @@ methods = {
                 # all waves that should be in this overlay
                 'waves': [
                     # [angle, pens, thresholds]
-                    (math.pi / 4.0, [1],       [+80]),
-                    (0,             [2, 2],    [+140, +160]),
-                    (math.pi / 2.0, [3, 3, 4], [+100, +120, +180]),
+                    (math.pi / 4.0, [default_pen],     [+80]),
+                    (0,             [default_pen] * 2, [+140, +160]),
+                    (math.pi / 2.0, [default_pen] * 3, [+100, +120, +180]),
                 ],
                 # distance each line is offset, screen units
-                'line_spacing': 5,
+                'line_spacing': 4,
                 # distance along each line for intensity changes, screen units
                 'line_res': 2,
                 # distance between the onion layers, screen units
-                'level_spacing': 1.5,
+                'level_spacing': 1.2,
             },
             'moire': {
                 'line_spacing': 2.0,
@@ -360,10 +384,28 @@ methods = {
                 'amplitude': 0,
                 'waves': [
                     # [angle, pens, thresholds]
-                    (-0.05, [1], [0]),
-                    (0.05,  [1] + [None] * 6, [0, +80, +100, +120, +140, +160, +180]),
+                    (-0.05, [default_pen], [0]),
+                    (0.05,  [default_pen] + [None] * 6, [0, +80, +100, +120, +140, +160, +180]),
                 ],
              },
+            'cmyk': {
+                'bands': 4,
+                'waves': sum([
+                    # [angle, pens, thresholds]
+                    [(math.pi / 4.0 + a, [l+1],     [ +80], l),
+                     (0 + a,             [l+1] * 2, [ +140, +160], l),
+                     (math.pi / 2.0 + a, [l+1] * 3, [ +100, +120, +180], l),] for l,a in (
+                         # C = 15 deg, M = 75 deg, Y = 0 deg, K = 45 deg
+                         (0,math.pi/12.0) ,)],
+                         #, (1,5.0*math.pi/12.0), (2,0), (3,math.pi/4.0))],
+                    []),
+                # distance each line is offset, screen units
+                'line_spacing': 2.75,
+                # distance along each line for intensity changes, screen units
+                'line_res': 1,
+                # distance between the onion layers, screen units
+                'level_spacing': 0.8,
+            },
         },
     },
     'circle_involute': {
@@ -440,8 +482,16 @@ spec = method['specs'][spec_name]
 
 #dxf.circle(0,-0,3,pen=6)
 #dxf.circle(screen_width,-screen_height,3,pen=7)
+bands = spec.get('bands', 1)
+if bands == 1:
+  im = im.convert("L")
+im.load()
+#print 'doing bands %s' % (im.getbands())
+print 'im mode = %s' % im.mode
+print im.getextrema()
+pix = [x.load() for x in im.split()]
 
-method['draw'](spec)
+method['draw'](pix, spec)
 
 dxf.footer(dxfname)
 
