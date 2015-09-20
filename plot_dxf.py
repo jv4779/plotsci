@@ -26,8 +26,8 @@ RED = 2
 GREEN = 3
 BLUE = 4
 CYAN = 5
-YELLOW = 6
-MAGENTA = 7
+MAGENTA = 6
+YELLOW = 7
 PEN_8 = 8
 
 _pen_to_color = {
@@ -36,8 +36,8 @@ _pen_to_color = {
   GREEN:   3,
   BLUE:    5,
   CYAN:    4,
-  YELLOW:  2,
   MAGENTA: 6,
+  YELLOW:  2,
   PEN_8:   8,
 }
 
